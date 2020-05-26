@@ -20,6 +20,35 @@ import uk.ac.bris.cs.databases.api.SimplePostView;
 import uk.ac.bris.cs.databases.api.SimpleTopicSummaryView;
 import uk.ac.bris.cs.databases.api.TopicView;
 
+// CREATE TABLE Forum(
+//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+//  title       VARCHAR(100)   NOT NULL      UNIQUE
+//);
+//
+//CREATE TABLE Topic(
+//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+//  title       VARCHAR(100)   NOT NULL,
+//  forumId     INTEGER        NOT NULL,
+//  CONSTRAINT  Forum_FK       FOREIGN KEY(forumId) REFERENCES Forum(id)
+//);
+//
+//CREATE TABLE Person(
+//  id        INTEGER          PRIMARY KEY   AUTO_INCREMENT,
+//  name      VARCHAR(100)     NOT NULL,
+//  username  VARCHAR(10)      NOT NULL      UNIQUE,
+//  stuId     VARCHAR(10)      NULL
+//);
+//
+//CREATE TABLE Post(
+//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+//  timePosted  DATETIME       NOT NULL,
+//  postText    VARCHAR(8000)  NOT NULL,
+//  personId    INTEGER        NOT NULL,
+//  topicId     INTEGER        NOT NULL,
+//  CONSTRAINT  Person_FK      FOREIGN KEY(personId) REFERENCES Person(id),
+//  CONSTRAINT  Topic_FK      FOREIGN KEY(topicId) REFERENCES Topic(id)
+//);
+
 /**
  *
  * @author csxdb
@@ -102,7 +131,7 @@ public class API implements APIProvider {
             return Result.failure("Username cannot be empty.");
         }
         try (PreparedStatement p = c.prepareStatement(
-                "SELECT name, stuId FROM Person WHERE username = ?"
+            "SELECT name, stuId FROM Person WHERE username = ?"
         )) {
             p.setString(1, username);
             ResultSet r = p.executeQuery();
@@ -118,22 +147,7 @@ public class API implements APIProvider {
         }
     }
 
-    /**
-     * Get the "main page" containing a list of forums ordered alphabetically
-     * by title.
-     * @return the list of all forums; an empty list if there are no forums.
-     *
-     * Difficulty: *
-     * Used by: /forums (ForumsHandler)
-     */
-
     @Override
-    //CREATE TABLE Forum(
-    //  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-    //  title       VARCHAR(100)   NOT NULL      UNIQUE
-    //);
-    // public ForumSummaryView(int id, String title)
-
     public Result<List<ForumSummaryView>> getForums() {
         try (PreparedStatement p = c.prepareStatement(
             "SELECT * FROM Forum"
@@ -154,12 +168,53 @@ public class API implements APIProvider {
 
     @Override
     public Result<Integer> countPostsInTopic(int topicId) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        try (PreparedStatement p = c.prepareStatement(
+            "SELECT Count(Post.id) FROM Post WHERE topicId = ?"
+        )) {
+            p.setInt(1, topicId);
+            ResultSet r = p.executeQuery();
+            Integer postCount = r.getInt(1);
+            return Result.success(postCount);
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
     }
 
+
+
+    /**
+     * Get a view of a topic.
+     * @param topicId - the topic to get.
+     * @return The topic view if one exists with the given id,
+     * otherwise failure or fatal on database errors.
+     *
+     * Difficulty: **
+     * Used by: /topic/:id (TopicHandler)
+     */
+
+    // todo how to check what topicId is
     @Override
     public Result<TopicView> getTopic(int topicId) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        try (PreparedStatement p = c.prepareStatement(
+            "SELECT title, Post.postNumber AS postNum, Person.name AS name, " +
+                    "Post.postText AS text, Post.timePosted AS date FROM Topic" +
+                    "INNER JOIN Post ON Post.topicId = Topic.id" +
+                    "INNER JOIN Person ON Person.id = Post.personId" +
+                    "WHERE Topic.id = ?"
+        )) {
+            p.setInt(1, topicId);
+            ResultSet r = p.executeQuery();
+            if(!r.next()){
+                return Result.failure("Topic does not exist.");
+            }
+            // make list of SimplePostView with post data first :
+            //  public SimplePostView(int postNumber, String author, String text, String postedAt)
+            
+            // then make TopicView
+            //  public TopicView(int topicId, String title, List<SimplePostView> posts)
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
     }
 
     /* level 2 */
