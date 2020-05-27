@@ -123,7 +123,8 @@ public class API implements APIProvider {
     }
 
     /* level 1 */
-    //todo fix the spacing
+
+    //todo make with empty id
 
     @Override
     public Result<PersonView> getPersonView(String username) {
@@ -140,6 +141,7 @@ public class API implements APIProvider {
             }
             String name = r.getString(1);
             String stuId = r.getString(2);
+            if(stuId == null) stuId = "";
             PersonView personView = new PersonView(name, username, stuId);
             return Result.success(personView);
         } catch (SQLException e) {
@@ -214,7 +216,7 @@ public class API implements APIProvider {
 
     /* level 2 */
     // make list of topics in that forum
-    
+
     /**
      * Create a new forum.
      * @param title - the title of the forum. Must not be null or empty and
@@ -226,12 +228,45 @@ public class API implements APIProvider {
      * Used by: /newforum => /createforum (CreateForumHandler)
      */
 
-    // public ForumView(int id, String title, List<SimpleTopicSummaryView> topics)
-    // public SimpleTopicSummaryView(int topicId, int forumId, String title)
+    // CREATE TABLE Forum(
+//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+//  title       VARCHAR(100)   NOT NULL      UNIQUE
+//);
 
     @Override
     public Result createForum(String title) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        if (title == null || title.equals("")) {
+            return Result.failure("Title cannot be empty.");
+        }
+        // check that title does not already exist in forum despite forum being unique
+        try (PreparedStatement p = c.prepareStatement(
+            "SELECT count(1) AS count FROM Forum WHERE title = ?"
+        )) {
+            p.setString(1, title);
+            ResultSet r = p.executeQuery();
+            // if count greater than 0 then the forum exists
+            if (r.next() && r.getInt("count") > 0) {
+                return Result.failure("A forum called " + title + " already exists.");
+            }
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
+        try (PreparedStatement p = c.prepareStatement(
+            "INSERT INTO Forum (title) VALUES (?)"
+        )) {
+            p.setString(1, title);
+            p.executeUpdate();
+            c.commit();
+        } catch (SQLException e) {
+            try {
+                c.rollback();
+            } catch (SQLException f) {
+                return Result.fatal("SQL error on rollback - [" + f +
+                        "] from handling exception " + e);
+            }
+            return Result.fatal(e.getMessage());
+        }
+        return Result.success();
     }
 
     @Override
