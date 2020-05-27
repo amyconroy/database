@@ -180,18 +180,6 @@ public class API implements APIProvider {
         }
     }
 
-
-
-    /**
-     * Get a view of a topic.
-     * @param topicId - the topic to get.
-     * @return The topic view if one exists with the given id,
-     * otherwise failure or fatal on database errors.
-     *
-     * Difficulty: **
-     * Used by: /topic/:id (TopicHandler)
-     */
-
     // todo how to check what topicId is
     @Override
     public Result<TopicView> getTopic(int topicId) {
@@ -207,11 +195,18 @@ public class API implements APIProvider {
             if(!r.next()){
                 return Result.failure("Topic does not exist.");
             }
-            // make list of SimplePostView with post data first :
-            //  public SimplePostView(int postNumber, String author, String text, String postedAt)
-            
-            // then make TopicView
-            //  public TopicView(int topicId, String title, List<SimplePostView> posts)
+            String title = r.getString("title");
+            ArrayList<SimplePostView> postView = new ArrayList<>();
+            do{
+                int postNum = r.getInt("postNum");
+                String author = r.getString("name");
+                String text = r.getString("text");
+                String date = r.getString("date");
+                SimplePostView simplePostView = new SimplePostView(postNum, author, text, date);
+                postView.add(simplePostView);
+            } while(r.next());
+            TopicView topicView = new TopicView(topicId, title, postView);
+            return Result.success(topicView);
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
@@ -219,6 +214,21 @@ public class API implements APIProvider {
 
     /* level 2 */
     // make list of topics in that forum
+    
+    /**
+     * Create a new forum.
+     * @param title - the title of the forum. Must not be null or empty and
+     * no forum with this name must exist yet.
+     * @return success if the forum was created, failure if the title was
+     * null, empty or such a forum already existed; fatal on other errors.
+     *
+     * Difficulty: **
+     * Used by: /newforum => /createforum (CreateForumHandler)
+     */
+
+    // public ForumView(int id, String title, List<SimpleTopicSummaryView> topics)
+    // public SimpleTopicSummaryView(int topicId, int forumId, String title)
+
     @Override
     public Result createForum(String title) {
         throw new UnsupportedOperationException("Not supported yet.");
