@@ -21,35 +21,6 @@ import uk.ac.bris.cs.databases.api.SimplePostView;
 import uk.ac.bris.cs.databases.api.SimpleTopicSummaryView;
 import uk.ac.bris.cs.databases.api.TopicView;
 
-// CREATE TABLE Forum(
-//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-//  title       VARCHAR(100)   NOT NULL      UNIQUE
-//);
-//
-//CREATE TABLE Topic(
-//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-//  title       VARCHAR(100)   NOT NULL,
-//  forumId     INTEGER        NOT NULL,
-//  CONSTRAINT  Forum_FK       FOREIGN KEY(forumId) REFERENCES Forum(id)
-//);
-//
-//CREATE TABLE Person(
-//  id        INTEGER          PRIMARY KEY   AUTO_INCREMENT,
-//  name      VARCHAR(100)     NOT NULL,
-//  username  VARCHAR(10)      NOT NULL      UNIQUE,
-//  stuId     VARCHAR(10)      NULL
-//);
-//
-//CREATE TABLE Post(
-//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-//  timePosted  DATETIME       NOT NULL,
-//  postText    VARCHAR(8000)  NOT NULL,
-//  personId    INTEGER        NOT NULL,
-//  topicId     INTEGER        NOT NULL,
-//  CONSTRAINT  Person_FK      FOREIGN KEY(personId) REFERENCES Person(id),
-//  CONSTRAINT  Topic_FK      FOREIGN KEY(topicId) REFERENCES Topic(id)
-//);
-
 /**
  *
  * @author csxdb
@@ -181,14 +152,13 @@ public class API implements APIProvider {
         }
     }
 
-    // todo how to check what topicId is
     @Override
     public Result<TopicView> getTopic(int topicId) {
         try (PreparedStatement p = c.prepareStatement(
-        "SELECT title, Post.postNumber AS postNum, Person.name AS name, " +
+        "SELECT title, Post.id AS postNum, Person.name AS name, " +
                     "Post.postText AS text, Post.timePosted AS date FROM Topic " +
-                    "INNER JOIN Post ON Post.topicId = Topic.id" +
-                    "INNER JOIN Person ON Person.id = Post.personId" +
+                    "INNER JOIN Post ON Post.topicId = Topic.id " +
+                    "INNER JOIN Person ON Person.id = Post.personId " +
                     "WHERE Topic.id = ?"
         )) {
             p.setInt(1, topicId);
@@ -198,13 +168,14 @@ public class API implements APIProvider {
             }
             String title = r.getString("title");
             ArrayList<SimplePostView> postView = new ArrayList<>();
+            int postNum = 1;
             do{
-                int postNum = r.getInt("postNum");
                 String author = r.getString("name");
                 String text = r.getString("text");
                 String date = r.getString("date");
                 SimplePostView simplePostView = new SimplePostView(postNum, author, text, date);
                 postView.add(simplePostView);
+                postNum++;
             } while(r.next());
             TopicView topicView = new TopicView(topicId, title, postView);
             return Result.success(topicView);
@@ -304,10 +275,10 @@ public class API implements APIProvider {
         )) {
             p.setString(1, username);
             ResultSet r = p.executeQuery();
-            personId = r.getInt("id");
             if (!r.next()) {
                 return Result.failure("A user called " + username + "does not exist.");
             }
+            personId = r.getInt("id");
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
@@ -333,43 +304,10 @@ public class API implements APIProvider {
 
     /* level 3 */
 
-
-    /**
-     * Create a new topic in a forum.
-     * @param forumId - the id of the forum in which to create the topic. This
-     * forum must exist.
-     * @param username - the username under which to make this post. Must refer
-     * to an existing username.
-     * @param title - the title of this topic. Cannot be empty.
-     * @param text - the text of the initial post. Cannot be empty.
-     * @return failure if any of the preconditions are not met (forum does not
-     * exist, user does not exist, title or text empty);
-     * success if the post was created and fatal if something else went wrong.
-     *
-     * Difficulty: ***
-     * Used by: /newtopic/:id => /createtopic (CreateTopicHandler)
-     */
-
-    //CREATE TABLE Person(
-//  id        INTEGER          PRIMARY KEY   AUTO_INCREMENT,
-//  name      VARCHAR(100)     NOT NULL,
-//  username  VARCHAR(10)      NOT NULL      UNIQUE,
-//  stuId     VARCHAR(10)      NULL
-//);
-// CREATE TABLE Topic(
-//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-//  title       VARCHAR(100)   NOT NULL,
-//  forumId     INTEGER        NOT NULL,
-//  CONSTRAINT  Forum_FK       FOREIGN KEY(forumId) REFERENCES Forum(id)
-//);
-
-    // CREATE TABLE Forum(
-//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-//  title       VARCHAR(100)   NOT NULL      UNIQUE
-//);
-
     @Override
     public Result createTopic(int forumId, String username, String title, String text) {
+        int topicId;
+        int personId;
         if (username == null || username.equals("")) {
             return Result.failure("Username cannot be empty.");
         } // cant make an empty post
@@ -379,7 +317,69 @@ public class API implements APIProvider {
         if (title == null || title.equals("")) {
             return Result.failure("Title cannot be empty.");
         }
-        
+        // createPost checks for the userName and that text can't be null and userName
+        try (PreparedStatement p = c.prepareStatement(
+        "SELECT id FROM Person WHERE username = ?"
+        )) {
+            p.setString(1, username);
+            ResultSet r = p.executeQuery();
+            if (!(r.next()) && !(r.getInt("c") > 0)) {
+                return Result.failure("A user called " + username + " does not exist.");
+            }
+            personId = r.getInt("id");
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
+        getForum(forumId); // check that the forum exists
+        try (PreparedStatement s = c.prepareStatement(
+        "INSERT INTO Topic (title, forumId) VALUES (?, ?)"
+        )) {
+            s.setString(1, title);
+            s.setInt(2, forumId);
+            s.executeUpdate();
+            c.commit();
+        } catch (SQLException e) {
+            try {
+                c.rollback();
+            } catch (SQLException f) {
+                return Result.fatal("SQL error on rollback - [" + f +
+                        "] from handling exception " + e);
+            }
+            return Result.fatal(e.getMessage());
+        }
+        // get the topicId
+        try (PreparedStatement p = c.prepareStatement(
+        "SELECT id AS topicId FROM Topic " +
+                "ORDER BY id DESC LIMIT 1"
+        )) {
+            ResultSet r = p.executeQuery();
+            r.next();
+            topicId = r.getInt("topicId");
+            try (PreparedStatement t = c.prepareStatement(
+            "INSERT INTO Post (timePosted, postText, personId, topicId) VALUES (now(), ?, ?, ?)"
+            )) {
+                t.setString(1, text);
+                t.setInt(2, personId);
+                t.setInt(3, topicId);
+                t.executeUpdate();
+                c.commit();
+            } catch (SQLException e) {
+                try {
+                    c.rollback();
+                } catch (SQLException f) {
+                    return Result.fatal("SQL error on rollback - [" + f +
+                            "] from handling exception " + e);
+                }
+                return Result.fatal(e.getMessage());
+            }
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
+        return Result.success();
     }
+
+    // PRIVATE METHODS //
+
+    private
 
 }
