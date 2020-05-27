@@ -6,6 +6,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -65,7 +66,6 @@ public class API implements APIProvider {
     public Result<Map<String, String>> getUsers() {
         try (Statement s = c.createStatement()) {
             ResultSet r = s.executeQuery("SELECT name, username FROM Person");
-
             Map<String, String> data = new HashMap<>();
             while (r.next()) {
                 data.put(r.getString("username"), r.getString("name"));
@@ -89,11 +89,10 @@ public class API implements APIProvider {
             return Result.failure("Username cannot be empty.");
         }
         try (PreparedStatement p = c.prepareStatement(
-            "SELECT count(1) AS c FROM Person WHERE username = ?"
+       "SELECT count(1) AS c FROM Person WHERE username = ?"
         )) {
             p.setString(1, username);
             ResultSet r = p.executeQuery();
-
             if (r.next() && r.getInt("c") > 0) {
                 return Result.failure("A user called " + username + " already exists.");
             }
@@ -102,7 +101,7 @@ public class API implements APIProvider {
         }
 
         try (PreparedStatement p = c.prepareStatement(
-            "INSERT INTO Person (name, username, stuId) VALUES (?, ?, ?)"
+        "INSERT INTO Person (name, username, stuId) VALUES (?, ?, ?)"
         )) {
             p.setString(1, name);
             p.setString(2, username);
@@ -132,7 +131,7 @@ public class API implements APIProvider {
             return Result.failure("Username cannot be empty.");
         }
         try (PreparedStatement p = c.prepareStatement(
-            "SELECT name, stuId FROM Person WHERE username = ?"
+        "SELECT name, stuId FROM Person WHERE username = ?"
         )) {
             p.setString(1, username);
             ResultSet r = p.executeQuery();
@@ -152,7 +151,7 @@ public class API implements APIProvider {
     @Override
     public Result<List<ForumSummaryView>> getForums() {
         try (PreparedStatement p = c.prepareStatement(
-            "SELECT * FROM Forum"
+        "SELECT * FROM Forum"
         )) {
             ArrayList<ForumSummaryView> forumList = new ArrayList<>();
             ResultSet r = p.executeQuery();
@@ -171,7 +170,7 @@ public class API implements APIProvider {
     @Override
     public Result<Integer> countPostsInTopic(int topicId) {
         try (PreparedStatement p = c.prepareStatement(
-            "SELECT Count(Post.id) FROM Post WHERE topicId = ?"
+        "SELECT Count(Post.id) FROM Post WHERE topicId = ?"
         )) {
             p.setInt(1, topicId);
             ResultSet r = p.executeQuery();
@@ -186,7 +185,7 @@ public class API implements APIProvider {
     @Override
     public Result<TopicView> getTopic(int topicId) {
         try (PreparedStatement p = c.prepareStatement(
-            "SELECT title, Post.postNumber AS postNum, Person.name AS name, " +
+        "SELECT title, Post.postNumber AS postNum, Person.name AS name, " +
                     "Post.postText AS text, Post.timePosted AS date FROM Topic " +
                     "INNER JOIN Post ON Post.topicId = Topic.id" +
                     "INNER JOIN Person ON Person.id = Post.personId" +
@@ -215,24 +214,6 @@ public class API implements APIProvider {
     }
 
     /* level 2 */
-    // make list of topics in that forum
-
-    /**
-     * Create a new forum.
-     * @param title - the title of the forum. Must not be null or empty and
-     * no forum with this name must exist yet.
-     * @return success if the forum was created, failure if the title was
-     * null, empty or such a forum already existed; fatal on other errors.
-     *
-     * Difficulty: **
-     * Used by: /newforum => /createforum (CreateForumHandler)
-     */
-
-    // CREATE TABLE Forum(
-//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-//  title       VARCHAR(100)   NOT NULL      UNIQUE
-//);
-
     @Override
     public Result createForum(String title) {
         if (title == null || title.equals("")) {
@@ -240,7 +221,7 @@ public class API implements APIProvider {
         }
         // check that title does not already exist in forum despite forum being unique
         try (PreparedStatement p = c.prepareStatement(
-            "SELECT count(1) AS count FROM Forum WHERE title = ?"
+        "SELECT count(1) AS count FROM Forum WHERE title = ?"
         )) {
             p.setString(1, title);
             ResultSet r = p.executeQuery();
@@ -252,7 +233,7 @@ public class API implements APIProvider {
             return Result.fatal(e.getMessage());
         }
         try (PreparedStatement p = c.prepareStatement(
-            "INSERT INTO Forum (title) VALUES (?)"
+         "INSERT INTO Forum (title) VALUES (?)"
         )) {
             p.setString(1, title);
             p.executeUpdate();
@@ -276,7 +257,7 @@ public class API implements APIProvider {
         //  public SimpleTopicSummaryView(int topicId, int forumId, String title)
         //  public ForumView(int id, String title, List<SimpleTopicSummaryView> topics)
         try (PreparedStatement p = c.prepareStatement(
-         "SELECT title AS forumTitle FROM Forum WHERE id = ?"
+        "SELECT title AS forumTitle FROM Forum WHERE id = ?"
         )) {
             p.setInt(1, id);
             ResultSet r = p.executeQuery();
@@ -288,7 +269,7 @@ public class API implements APIProvider {
             return Result.fatal(e.getMessage());
         }
         try (PreparedStatement p = c.prepareStatement(
-                "SELECT Topic.id AS topicId, Topic.title AS topicTitle FROM Topic " +
+       "SELECT Topic.id AS topicId, Topic.title AS topicTitle FROM Topic " +
                         "WHERE Topic.forumId = ?"
         )) {
             p.setInt(1, id);
@@ -309,14 +290,96 @@ public class API implements APIProvider {
 
     @Override
     public Result createPost(int topicId, String username, String text) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        int personId;
+        // parsing of the various inputs
+        if (username == null || username.equals("")) {
+            return Result.failure("Username cannot be empty.");
+        } // cant make an empty post
+        if (text == null || text.equals("")) {
+            return Result.failure("Post text cannot be empty.");
+        }
+        // first check that user exists and get their id number to create the post
+        try (PreparedStatement p = c.prepareStatement(
+        "SELECT id FROM Person WHERE username = ?"
+        )) {
+            p.setString(1, username);
+            ResultSet r = p.executeQuery();
+            personId = r.getInt("id");
+            if (!r.next()) {
+                return Result.failure("A user called " + username + "does not exist.");
+            }
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
+        try (PreparedStatement p = c.prepareStatement(
+        "INSERT INTO Post (timePosted, postText, personId, topicId) VALUES (now(), ?, ?, ?)"
+        )) {
+            p.setString(1, text);
+            p.setInt(2, personId);
+            p.setInt(3, topicId);
+            p.executeUpdate();
+            c.commit();
+        } catch (SQLException e) {
+            try {
+                c.rollback();
+            } catch (SQLException f) {
+                return Result.fatal("SQL error on rollback - [" + f +
+                        "] from handling exception " + e);
+            }
+            return Result.fatal(e.getMessage());
+        }
+        return Result.success();
     }
 
     /* level 3 */
 
+
+    /**
+     * Create a new topic in a forum.
+     * @param forumId - the id of the forum in which to create the topic. This
+     * forum must exist.
+     * @param username - the username under which to make this post. Must refer
+     * to an existing username.
+     * @param title - the title of this topic. Cannot be empty.
+     * @param text - the text of the initial post. Cannot be empty.
+     * @return failure if any of the preconditions are not met (forum does not
+     * exist, user does not exist, title or text empty);
+     * success if the post was created and fatal if something else went wrong.
+     *
+     * Difficulty: ***
+     * Used by: /newtopic/:id => /createtopic (CreateTopicHandler)
+     */
+
+    //CREATE TABLE Person(
+//  id        INTEGER          PRIMARY KEY   AUTO_INCREMENT,
+//  name      VARCHAR(100)     NOT NULL,
+//  username  VARCHAR(10)      NOT NULL      UNIQUE,
+//  stuId     VARCHAR(10)      NULL
+//);
+// CREATE TABLE Topic(
+//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+//  title       VARCHAR(100)   NOT NULL,
+//  forumId     INTEGER        NOT NULL,
+//  CONSTRAINT  Forum_FK       FOREIGN KEY(forumId) REFERENCES Forum(id)
+//);
+
+    // CREATE TABLE Forum(
+//  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+//  title       VARCHAR(100)   NOT NULL      UNIQUE
+//);
+
     @Override
     public Result createTopic(int forumId, String username, String title, String text) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        if (username == null || username.equals("")) {
+            return Result.failure("Username cannot be empty.");
+        } // cant make an empty post
+        if (text == null || text.equals("")) {
+            return Result.failure("First post text cannot be empty.");
+        }
+        if (title == null || title.equals("")) {
+            return Result.failure("Title cannot be empty.");
+        }
+        
     }
 
 }
