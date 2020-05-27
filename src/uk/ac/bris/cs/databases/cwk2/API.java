@@ -187,7 +187,7 @@ public class API implements APIProvider {
     public Result<TopicView> getTopic(int topicId) {
         try (PreparedStatement p = c.prepareStatement(
             "SELECT title, Post.postNumber AS postNum, Person.name AS name, " +
-                    "Post.postText AS text, Post.timePosted AS date FROM Topic" +
+                    "Post.postText AS text, Post.timePosted AS date FROM Topic " +
                     "INNER JOIN Post ON Post.topicId = Topic.id" +
                     "INNER JOIN Person ON Person.id = Post.personId" +
                     "WHERE Topic.id = ?"
@@ -270,15 +270,47 @@ public class API implements APIProvider {
     }
 
     @Override
+    // todo change the check
     public Result<ForumView> getForum(int id) {
-        throw new UnsupportedOperationException("Not supported yet.");
+        String forumTitle;
+        //  public SimpleTopicSummaryView(int topicId, int forumId, String title)
+        //  public ForumView(int id, String title, List<SimpleTopicSummaryView> topics)
+        try (PreparedStatement p = c.prepareStatement(
+         "SELECT title AS forumTitle FROM Forum WHERE id = ?"
+        )) {
+            p.setInt(1, id);
+            ResultSet r = p.executeQuery();
+            if (!r.next()) {
+                return Result.failure("Forum does not exist.");
+            }
+            forumTitle = r.getString("forumTitle");
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
+        try (PreparedStatement p = c.prepareStatement(
+                "SELECT Topic.id AS topicId, Topic.title AS topicTitle FROM Topic " +
+                        "WHERE Topic.forumId = ?"
+        )) {
+            p.setInt(1, id);
+            ResultSet r = p.executeQuery();
+            ArrayList<SimpleTopicSummaryView> summaryView = new ArrayList<>();
+            while(r.next()){
+                int topicId = r.getInt("topicId");
+                String topicTitle = r.getString("topicTitle");
+                SimpleTopicSummaryView simpleTopicView = new SimpleTopicSummaryView(topicId, id, topicTitle);
+                summaryView.add(simpleTopicView);
+            }
+            ForumView forumView = new ForumView(id, forumTitle, summaryView);
+            return Result.success(forumView);
+        } catch (SQLException e) {
+            return Result.fatal(e.getMessage());
+        }
     }
 
     @Override
     public Result createPost(int topicId, String username, String text) {
         throw new UnsupportedOperationException("Not supported yet.");
     }
-
 
     /* level 3 */
 
