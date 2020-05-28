@@ -312,7 +312,7 @@ public class API implements APIProvider {
         //todo this getforum doesnt perform the check
         getForum(forumId); // check that the forum exists
         try {
-            query.insertTopic(title, forumId, c);
+            query.insertTopic(title, forumId, personId, c);
             topicId = query.getTopicId(c);
             query.insertPost(text, personId, topicId, c);
         }

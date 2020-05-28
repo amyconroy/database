@@ -96,12 +96,13 @@ public class Queries {
         }
     }
 
-    public void insertTopic(String title, int forumId, Connection c) throws SQLException {
+    public void insertTopic(String title, int forumId, int personId, Connection c) throws SQLException {
         try (PreparedStatement s = c.prepareStatement(
-        "INSERT INTO Topic (title, forumId) VALUES (?, ?)"
+        "INSERT INTO Topic (title, forumId, personId) VALUES (?, ?, ?)"
         )) {
             s.setString(1, title);
             s.setInt(2, forumId);
+            s.setInt(3, personId);
             s.executeUpdate();
             c.commit();
         }
