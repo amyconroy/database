@@ -18,7 +18,7 @@ public class PersonView {
     */
     private final String studentId;
     
-    public PersonView(String name, String username, String studentId) {
+    public PersonView(String name, String username, String studentId){
         
         Params.cannotBeEmpty(name);
         Params.cannotBeEmpty(username);

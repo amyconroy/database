@@ -21,15 +21,28 @@ import uk.ac.bris.cs.databases.api.SimplePostView;
 import uk.ac.bris.cs.databases.api.SimpleTopicSummaryView;
 import uk.ac.bris.cs.databases.api.TopicView;
 
+
 /**
+ * This class has been updated to provide
+ * based on use case. Here results and parsing
+ * of input occurs.
+ *
+ * SQL queries and updates
+ * are run in the separate Queries class
+ * that handles any executing and updating of the
+ * queries. Implementations author ac16888.
+ *
  *
  * @author csxdb
  */
 public class API implements APIProvider {
     private final Connection c;
+    private Queries query = new Queries();
+
     public API(Connection c) {
         this.c = c;
     }
+
 
     /* predefined methods */
 
@@ -41,7 +54,6 @@ public class API implements APIProvider {
             while (r.next()) {
                 data.put(r.getString("username"), r.getString("name"));
             }
-
             return Result.success(data);
         } catch (SQLException ex) {
             return Result.fatal("database error - " + ex.getMessage());
@@ -59,27 +71,14 @@ public class API implements APIProvider {
         if (username == null || username.equals("")) {
             return Result.failure("Username cannot be empty.");
         }
-        try (PreparedStatement p = c.prepareStatement(
-       "SELECT count(1) AS c FROM Person WHERE username = ?"
-        )) {
-            p.setString(1, username);
-            ResultSet r = p.executeQuery();
-            if (r.next() && r.getInt("c") > 0) {
-                return Result.failure("A user called " + username + " already exists.");
+        try {
+            if(!query.checkNotExistingUser(username, c)){
+                return Result.failure("User with username" + username + "already exists.");
             }
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
-
-        try (PreparedStatement p = c.prepareStatement(
-        "INSERT INTO Person (name, username, stuId) VALUES (?, ?, ?)"
-        )) {
-            p.setString(1, name);
-            p.setString(2, username);
-            p.setString(3, studentId);
-            p.executeUpdate();
-
-            c.commit();
+        try { query.insertPerson(name, username, studentId, c);
         } catch (SQLException e) {
             try {
                 c.rollback();
@@ -191,25 +190,17 @@ public class API implements APIProvider {
             return Result.failure("Title cannot be empty.");
         }
         // check that title does not already exist in forum despite forum being unique
-        try (PreparedStatement p = c.prepareStatement(
-        "SELECT count(1) AS count FROM Forum WHERE title = ?"
-        )) {
-            p.setString(1, title);
-            ResultSet r = p.executeQuery();
-            // if count greater than 0 then the forum exists
-            if (r.next() && r.getInt("count") > 0) {
-                return Result.failure("A forum called " + title + " already exists.");
+        try {
+            if(!query.checkNotExistingForum(title, c)){
+                return Result.failure("Forum named" + title + "already exists");
             }
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
-        try (PreparedStatement p = c.prepareStatement(
-         "INSERT INTO Forum (title) VALUES (?)"
-        )) {
-            p.setString(1, title);
-            p.executeUpdate();
-            c.commit();
-        } catch (SQLException e) {
+        try{
+            query.insertForum(title, c);
+        }
+        catch (SQLException e) {
             try {
                 c.rollback();
             } catch (SQLException f) {
@@ -270,26 +261,17 @@ public class API implements APIProvider {
             return Result.failure("Post text cannot be empty.");
         }
         // first check that user exists and get their id number to create the post
-        try (PreparedStatement p = c.prepareStatement(
-        "SELECT id FROM Person WHERE username = ?"
-        )) {
-            p.setString(1, username);
-            ResultSet r = p.executeQuery();
-            if (!r.next()) {
-                return Result.failure("A user called " + username + "does not exist.");
+        try{
+            // user does not exist
+            if(query.checkNotExistingUser(username, c)){
+                return Result.failure("No user existing.");
             }
-            personId = r.getInt("id");
+            personId = query.getPersonId(username, c);
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
-        try (PreparedStatement p = c.prepareStatement(
-        "INSERT INTO Post (timePosted, postText, personId, topicId) VALUES (now(), ?, ?, ?)"
-        )) {
-            p.setString(1, text);
-            p.setInt(2, personId);
-            p.setInt(3, topicId);
-            p.executeUpdate();
-            c.commit();
+        try {
+            query.insertPost(text, personId, topicId, c);
         } catch (SQLException e) {
             try {
                 c.rollback();
@@ -317,28 +299,24 @@ public class API implements APIProvider {
         if (title == null || title.equals("")) {
             return Result.failure("Title cannot be empty.");
         }
-        // createPost checks for the userName and that text can't be null and userName
-        try (PreparedStatement p = c.prepareStatement(
-        "SELECT id FROM Person WHERE username = ?"
-        )) {
-            p.setString(1, username);
-            ResultSet r = p.executeQuery();
-            if (!(r.next()) && !(r.getInt("c") > 0)) {
-                return Result.failure("A user called " + username + " does not exist.");
+        try{
+            // user does not exist
+            // todo check not at same time SELECT AS () subselect
+            if(query.checkNotExistingUser(username, c)){
+                return Result.failure("No user existing.");
             }
-            personId = r.getInt("id");
+            personId = query.getPersonId(username, c);
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
+        //todo this getforum doesnt perform the check
         getForum(forumId); // check that the forum exists
-        try (PreparedStatement s = c.prepareStatement(
-        "INSERT INTO Topic (title, forumId) VALUES (?, ?)"
-        )) {
-            s.setString(1, title);
-            s.setInt(2, forumId);
-            s.executeUpdate();
-            c.commit();
-        } catch (SQLException e) {
+        try {
+            query.insertTopic(title, forumId, c);
+            topicId = query.getTopicId(c);
+            query.insertPost(text, personId, topicId, c);
+        }
+        catch (SQLException e) {
             try {
                 c.rollback();
             } catch (SQLException f) {
@@ -347,39 +325,6 @@ public class API implements APIProvider {
             }
             return Result.fatal(e.getMessage());
         }
-        // get the topicId
-        try (PreparedStatement p = c.prepareStatement(
-        "SELECT id AS topicId FROM Topic " +
-                "ORDER BY id DESC LIMIT 1"
-        )) {
-            ResultSet r = p.executeQuery();
-            r.next();
-            topicId = r.getInt("topicId");
-            try (PreparedStatement t = c.prepareStatement(
-            "INSERT INTO Post (timePosted, postText, personId, topicId) VALUES (now(), ?, ?, ?)"
-            )) {
-                t.setString(1, text);
-                t.setInt(2, personId);
-                t.setInt(3, topicId);
-                t.executeUpdate();
-                c.commit();
-            } catch (SQLException e) {
-                try {
-                    c.rollback();
-                } catch (SQLException f) {
-                    return Result.fatal("SQL error on rollback - [" + f +
-                            "] from handling exception " + e);
-                }
-                return Result.fatal(e.getMessage());
-            }
-        } catch (SQLException e) {
-            return Result.fatal(e.getMessage());
-        }
         return Result.success();
     }
-
-    // PRIVATE METHODS //
-
-    private
-
 }
