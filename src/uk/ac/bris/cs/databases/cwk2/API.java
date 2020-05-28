@@ -189,6 +189,10 @@ public class API implements APIProvider {
         if (title == null || title.equals("")) {
             return Result.failure("Title cannot be empty.");
         }
+        int chars = countCharacters(title);
+        if(chars > 100){
+            return Result.failure("Please ensure title is less than 100 characters.");
+        }
         // check that title does not already exist in forum despite forum being unique
         try {
             if(!query.checkNotExistingForum(title, c)){
@@ -326,5 +330,13 @@ public class API implements APIProvider {
             return Result.fatal(e.getMessage());
         }
         return Result.success();
+    }
+
+    /**
+    /* private methods to assist in functionalities, primarily for checking correct input */
+
+    // this method is used to count chars to guard against database exceptions
+    private int countCharacters(String input){
+        return input.length();
     }
 }
