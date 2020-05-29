@@ -1,15 +1,11 @@
 package uk.ac.bris.cs.databases.cwk2;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import uk.ac.bris.cs.databases.api.APIProvider;
@@ -27,17 +23,19 @@ import uk.ac.bris.cs.databases.api.TopicView;
  * based on use case. Here results and parsing
  * of input occurs.
  *
- * SQL queries and updates
+ * General/basic SQL queries and updates
  * are run in the separate Queries class
  * that handles any executing and updating of the
- * queries. Implementations author ac16888.
+ * queries. More specific queries updated in the
+ * method in the API.
+ * Implementations author ac16888.
  *
  *
  * @author csxdb
  */
 public class API implements APIProvider {
     private final Connection c;
-    private Queries query = new Queries();
+    private final Queries query = new Queries(); // contains general SQL queries for this database schema
 
     public API(Connection c) {
         this.c = c;
@@ -62,16 +60,23 @@ public class API implements APIProvider {
 
     @Override
     public Result addNewPerson(String name, String username, String studentId) {
+        // limits as specified in the create / drop script (checked to ensure they don't exceed)
         if (studentId != null && studentId.equals("")) {
             return Result.failure("StudentId can be null, but cannot be the empty string.");
         }
-        if (name == null || name.equals("")) {
-            return Result.failure("Name cannot be empty.");
+        // must be in two steps, checking length after checking not null (can't do at same time)
+        if(!(checkLength(studentId, 10))){
+            return Result.failure("StudentId cannot exceed 10 characters.");
         }
-        if (username == null || username.equals("")) {
-            return Result.failure("Username cannot be empty.");
+        if (name == null || name.equals("") || !(checkLength(name, 100))) {
+            return Result.failure("Name cannot be empty or exceed 100 characters.");
+        }
+        if (username == null || username.equals("") || !(checkLength(username, 10))) {
+            return Result.failure("Username cannot be empty or exceed 10 characters.");
         }
         try {
+            /* first check that the user does not exist - boolean and is false is user is an existing user.
+            query needed to ensure username is not duplicated */
             if(!query.checkNotExistingUser(username, c)){
                 return Result.failure("User with username" + username + "already exists.");
             }
@@ -80,20 +85,12 @@ public class API implements APIProvider {
         }
         try { query.insertPerson(name, username, studentId, c);
         } catch (SQLException e) {
-            try {
-                c.rollback();
-            } catch (SQLException f) {
-                return Result.fatal("SQL error on rollback - [" + f +
-                "] from handling exception " + e);
-            }
-            return Result.fatal(e.getMessage());
+            return rollBack(e);
         }
         return Result.success();
     }
 
     /* level 1 */
-
-    //todo make with empty id
 
     @Override
     public Result<PersonView> getPersonView(String username) {
@@ -105,11 +102,13 @@ public class API implements APIProvider {
         )) {
             p.setString(1, username);
             ResultSet r = p.executeQuery();
+            // was not able to access the username (no results in result set)
             if (!r.next()) {
                 return Result.failure("A user called " + username + "does not exist.");
             }
-            String name = r.getString(1);
-            String stuId = r.getString(2);
+            String name = r.getString("name");
+            String stuId = r.getString("stuId");
+            // if null, change it to empty string, ensure no errors thrown when making the personView
             if(stuId == null) stuId = "";
             PersonView personView = new PersonView(name, username, stuId);
             return Result.success(personView);
@@ -126,10 +125,10 @@ public class API implements APIProvider {
             ArrayList<ForumSummaryView> forumList = new ArrayList<>();
             ResultSet r = p.executeQuery();
             while (r.next()) {
-                int id = r.getInt(1);
-                String title = r.getString(2);
+                int id = r.getInt(1); // id is the first column in the table
+                String title = r.getString(2); // title of the forum is second
                 ForumSummaryView forumSummaryView = new ForumSummaryView(id, title);
-                forumList.add(forumSummaryView);
+                forumList.add(forumSummaryView); // returns a list of ForumSummaryView objects
             }
             return Result.success(forumList);
         } catch (SQLException e) {
@@ -140,6 +139,7 @@ public class API implements APIProvider {
     @Override
     public Result<Integer> countPostsInTopic(int topicId) {
         try (PreparedStatement p = c.prepareStatement(
+                // post.id unique per post so used to select a count of all posts
         "SELECT Count(Post.id) FROM Post WHERE topicId = ?"
         )) {
             p.setInt(1, topicId);
@@ -152,28 +152,33 @@ public class API implements APIProvider {
     }
 
     @Override
+    // this is executed in one query by joining the post and person table
     public Result<TopicView> getTopic(int topicId) {
         try (PreparedStatement p = c.prepareStatement(
-        "SELECT title, Post.id AS postNum, Person.name AS name, " +
-                    "Post.postText AS text, Post.timePosted AS date FROM Topic " +
+        "SELECT title, Person.name AS name, " +
+                    "Post.postText AS text, Post.timePosted AS date " +
+                    "FROM Topic " +
                     "INNER JOIN Post ON Post.topicId = Topic.id " +
                     "INNER JOIN Person ON Person.id = Post.personId " +
                     "WHERE Topic.id = ?"
         )) {
             p.setInt(1, topicId);
             ResultSet r = p.executeQuery();
+            // already executing query so extra validation check to ensure that the topic exists
             if(!r.next()){
                 return Result.failure("Topic does not exist.");
             }
             String title = r.getString("title");
             ArrayList<SimplePostView> postView = new ArrayList<>();
-            int postNum = 1;
+            int postNum = 1; // used to count the number of posts in the topic, iterates through results
+           /* do while loop to account for r.next() already being called - no guard to check
+            that there is a post as one post must be created when making topic */
             do{
                 String author = r.getString("name");
                 String text = r.getString("text");
                 String date = r.getString("date");
                 SimplePostView simplePostView = new SimplePostView(postNum, author, text, date);
-                postView.add(simplePostView);
+                postView.add(simplePostView); // list of SimplePostView returned, add here
                 postNum++;
             } while(r.next());
             TopicView topicView = new TopicView(topicId, title, postView);
@@ -189,63 +194,46 @@ public class API implements APIProvider {
         if (title == null || title.equals("")) {
             return Result.failure("Title cannot be empty.");
         }
-        int chars = countCharacters(title);
-        if(chars > 100){
+        // ensure that title is less than 100 characters
+        if(!checkLength(title, 100)){
             return Result.failure("Please ensure title is less than 100 characters.");
         }
-        // check that title does not already exist in forum despite forum being unique
-        try {
-            if(!query.checkNotExistingForum(title, c)){
-                return Result.failure("Forum named" + title + "already exists");
-            }
-        } catch (SQLException e) {
-            return Result.fatal(e.getMessage());
-        }
+        // check that title does not already exist in forum despite forum title being unique
         try{
-            query.insertForum(title, c);
+            // to allow user targeted error rather than SQL error - could be removed as title is UNIQUE
+            if(!query.checkNotExistingForum(title, c)){
+                return Result.failure("Forum named " + title + " already exists");
+            }
+            query.insertForum(title, c); //inserts new forum based on title in DB
         }
         catch (SQLException e) {
-            try {
-                c.rollback();
-            } catch (SQLException f) {
-                return Result.fatal("SQL error on rollback - [" + f +
-                        "] from handling exception " + e);
-            }
-            return Result.fatal(e.getMessage());
+            return rollBack(e);
         }
         return Result.success();
     }
 
     @Override
-    // todo change the check
     public Result<ForumView> getForum(int id) {
-        String forumTitle;
-        //  public SimpleTopicSummaryView(int topicId, int forumId, String title)
-        //  public ForumView(int id, String title, List<SimpleTopicSummaryView> topics)
         try (PreparedStatement p = c.prepareStatement(
-        "SELECT title AS forumTitle FROM Forum WHERE id = ?"
+        "SELECT Forum.title AS forumTitle, Topic.id AS topicId, Topic.title AS topicTitle " +
+                 "FROM Topic " +
+                 "RIGHT JOIN Forum ON Forum.id = Topic.forumId " +
+                 "WHERE Forum.id = ?"
         )) {
             p.setInt(1, id);
             ResultSet r = p.executeQuery();
-            if (!r.next()) {
-                return Result.failure("Forum does not exist.");
-            }
-            forumTitle = r.getString("forumTitle");
-        } catch (SQLException e) {
-            return Result.fatal(e.getMessage());
-        }
-        try (PreparedStatement p = c.prepareStatement(
-       "SELECT Topic.id AS topicId, Topic.title AS topicTitle FROM Topic " +
-                        "WHERE Topic.forumId = ?"
-        )) {
-            p.setInt(1, id);
-            ResultSet r = p.executeQuery();
+            // as already executing query extra check to ensure that forum exists
+            if(!r.next()) { return Result.failure("Forum does not exist."); }
+            String forumTitle = r.getString("forumTitle");
             ArrayList<SimpleTopicSummaryView> summaryView = new ArrayList<>();
-            while(r.next()){
-                int topicId = r.getInt("topicId");
-                String topicTitle = r.getString("topicTitle");
-                SimpleTopicSummaryView simpleTopicView = new SimpleTopicSummaryView(topicId, id, topicTitle);
-                summaryView.add(simpleTopicView);
+            // if there are no existing topics in the forum
+            if(r.getString("topicId") != null){
+                do{
+                    int topicId = r.getInt("topicId");
+                    String topicTitle = r.getString("topicTitle");
+                    SimpleTopicSummaryView simpleTopicView = new SimpleTopicSummaryView(topicId, id, topicTitle);
+                    summaryView.add(simpleTopicView);
+                } while(r.next());
             }
             ForumView forumView = new ForumView(id, forumTitle, summaryView);
             return Result.success(forumView);
@@ -258,32 +246,31 @@ public class API implements APIProvider {
     public Result createPost(int topicId, String username, String text) {
         int personId;
         // parsing of the various inputs
-        if (username == null || username.equals("")) {
-            return Result.failure("Username cannot be empty.");
-        } // cant make an empty post
-        if (text == null || text.equals("")) {
-            return Result.failure("Post text cannot be empty.");
+        if (username == null || username.equals("")) { return Result.failure("Username cannot be empty."); }
+        // cant make an empty post
+        if (text == null || text.equals("")) { return Result.failure("Post text cannot be empty."); }
+        // limit based on create/drop script
+        if(!checkLength(text, 8000)){
+            return Result.failure("Post length is too long, maximum 8000 characters allowed.");
         }
-        // first check that user exists and get their id number to create the post
-        try{
-            // user does not exist
-            if(query.checkNotExistingUser(username, c)){
+        /* first checks that user exists and then gets their id number to create the post
+        as the user id is necessary, also checks that valid user (no additional queries needed) */
+        try (PreparedStatement p = c.prepareStatement(
+        "SELECT id FROM Person WHERE username = ?"
+        )){
+            p.setString(1, username);
+            ResultSet r = p.executeQuery();
+            if(!r.next()){
+                // check that the user actually exists
                 return Result.failure("No user existing.");
-            }
-            personId = query.getPersonId(username, c);
+            } // get their id
+            personId = r.getInt("id");
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
-        try {
-            query.insertPost(text, personId, topicId, c);
+        try { query.insertPost(text, personId, topicId, c); //insert the data in to post table
         } catch (SQLException e) {
-            try {
-                c.rollback();
-            } catch (SQLException f) {
-                return Result.fatal("SQL error on rollback - [" + f +
-                        "] from handling exception " + e);
-            }
-            return Result.fatal(e.getMessage());
+            return rollBack(e);
         }
         return Result.success();
     }
@@ -294,49 +281,58 @@ public class API implements APIProvider {
     public Result createTopic(int forumId, String username, String title, String text) {
         int topicId;
         int personId;
-        if (username == null || username.equals("")) {
-            return Result.failure("Username cannot be empty.");
-        } // cant make an empty post
-        if (text == null || text.equals("")) {
-            return Result.failure("First post text cannot be empty.");
-        }
-        if (title == null || title.equals("")) {
-            return Result.failure("Title cannot be empty.");
-        }
-        try{
-            // user does not exist
-            // todo check not at same time SELECT AS () subselect
-            if(query.checkNotExistingUser(username, c)){
-                return Result.failure("No user existing.");
-            }
-            personId = query.getPersonId(username, c);
+        if(username == null || username.equals("")) { return Result.failure("Username cannot be empty."); }
+        // cant make an empty post
+        if(text == null || text.equals("")) { return Result.failure("First post text cannot be empty."); }
+        if(title == null || title.equals("")) { return Result.failure("Title cannot be empty."); }
+        // title has a limit of 100 characters, checks that it is less than that
+        if(!checkLength(title, 100)){ return Result.failure("Title cannot exceed 100 characters."); }
+        /* checks for existing user and gets the user id at the same time, checks existing user
+        as already includes a need to select user id*/
+        try (PreparedStatement p = c.prepareStatement(
+        "SELECT id FROM Person WHERE username = ?"
+        )){
+            p.setString(1, username);
+            ResultSet r = p.executeQuery();
+            if(!r.next()){
+                return Result.failure("No user existing."); // check that the user actually exists
+            } // get their id
+            personId = r.getInt("id");
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
-        //todo this getforum doesnt perform the check
-        getForum(forumId); // check that the forum exists
+        /* below are the execution queries - there is no check for valid forum to remove
+        * redunant queries in the system. due to the forumId FK this will be checked
+        * by the SQLException if there is an error when clicking on a forum that does not exist*/
         try {
             query.insertTopic(title, forumId, personId, c);
             topicId = query.getTopicId(c);
             query.insertPost(text, personId, topicId, c);
         }
         catch (SQLException e) {
-            try {
-                c.rollback();
-            } catch (SQLException f) {
-                return Result.fatal("SQL error on rollback - [" + f +
-                        "] from handling exception " + e);
-            }
-            return Result.fatal(e.getMessage());
+            return rollBack(e);
         }
         return Result.success();
     }
 
-    /**
-    /* private methods to assist in functionalities, primarily for checking correct input */
+    /// END OF INTERFACE METHODS ///
+    /// Below are private methods to assist in functionalities of API methods///
 
-    // this method is used to count chars to guard against database exceptions
-    private int countCharacters(String input){
-        return input.length();
+    /* this method is used to count chars to guard against database exceptions / remove duplicate code
+    in API  */
+    private boolean checkLength(String input, int limit){
+        int chars = input.length();
+        return chars < limit;
+    }
+
+    // executes the rollBack attempt to cut down on duplicated code
+    private Result rollBack(SQLException e){
+        try {
+            c.rollback();
+        } catch (SQLException f) {
+            return Result.fatal("SQL error on rollback - [" + f +
+                    "] from handling exception " + e);
+        }
+        return Result.fatal(e.getMessage());
     }
 }
