@@ -63,7 +63,7 @@ public class API implements APIProvider {
             return Result.failure("StudentId can be null, but cannot be the empty string.");
         }
         // must be in two steps, checking length after checking not null (can't do at same time)
-        if(!(checkLength(studentId, 10))){
+        if(studentId !=null && !(checkLength(studentId, 10))){
             return Result.failure("StudentId cannot exceed 10 characters.");
         }
         if (name == null || name.equals("") || !(checkLength(name, 100))) {
@@ -242,7 +242,7 @@ public class API implements APIProvider {
 
     @Override
     public Result createPost(int topicId, String username, String text) {
-        int personId;
+        Integer personId;
         // parsing of the various inputs
         if (username == null || username.equals("")) { return Result.failure("Username cannot be empty."); }
         // cant make an empty post
@@ -253,17 +253,12 @@ public class API implements APIProvider {
         }
         /* first checks that user exists and then gets their id number to create the post
         as the user id is necessary, also checks that valid user (no additional queries needed) */
-        try (PreparedStatement p = c.prepareStatement(
-        "SELECT id FROM Person WHERE username = ?"
-        )){
-            p.setString(1, username);
-            ResultSet r = p.executeQuery();
-            if(!r.next()){
-                // check that the user actually exists
-                return Result.failure("No user with this username.");
-            } // get their id
-            personId = r.getInt("id");
-        } catch (SQLException e) {
+        try {
+            personId = query.getUserId(username, c);
+            if(personId == null){
+                return Result.failure("User does not exist."); // returns null if the username isnt found
+            }
+        }catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }
         try { query.insertPost(text, personId, topicId, c); //insert the data in to post table
@@ -278,7 +273,7 @@ public class API implements APIProvider {
     @Override
     public Result createTopic(int forumId, String username, String title, String text) {
         int topicId;
-        int personId;
+        Integer personId;
         if(username == null || username.equals("")) { return Result.failure("Username cannot be empty."); }
         // cant make an empty post
         if(text == null || text.equals("")) { return Result.failure("First post text cannot be empty."); }
@@ -287,15 +282,11 @@ public class API implements APIProvider {
         if(!checkLength(title, 100)){ return Result.failure("Title cannot exceed 100 characters."); }
         /* checks for existing user and gets the user id at the same time, checks existing user
         as already includes a need to select user id*/
-        try (PreparedStatement p = c.prepareStatement(
-        "SELECT id FROM Person WHERE username = ?"
-        )){
-            p.setString(1, username);
-            ResultSet r = p.executeQuery();
-            if(!r.next()){
-                return Result.failure("No user existing."); // check that the user actually exists
-            } // get their id
-            personId = r.getInt("id");
+        try {
+            personId = query.getUserId(username, c);
+            if(personId == null){
+                return Result.failure("User does not exist."); // returns null if the username isnt found
+            }
         } catch (SQLException e) {
             return Result.fatal(e.getMessage());
         }

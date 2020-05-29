@@ -1,4 +1,6 @@
 package uk.ac.bris.cs.databases.cwk2;
+import uk.ac.bris.cs.databases.api.Result;
+
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -159,5 +161,27 @@ public class Queries {
             topicId = r.getInt("topicId");
         }
         return topicId;
+    }
+
+    /**
+     * get the Person.id attribute based on the username
+     * @param username - username to get the attribute Person.id
+     * @return Integer, the personId (returns null if the user is not found)
+     *
+     * Used by /createTopic, /createPost
+     */
+    public Integer getUserId(String username, Connection c) throws SQLException{
+        Integer personId = null;
+        try (PreparedStatement p = c.prepareStatement(
+        "SELECT id FROM Person WHERE username = ?"
+        )) {
+            p.setString(1, username);
+            ResultSet r = p.executeQuery();
+            if (!r.next()) {
+                return null; // check that the user actually exists
+            }
+           personId = r.getInt("id"); // get their id
+        }
+        return personId;
     }
 }
