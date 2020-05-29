@@ -21,6 +21,8 @@ public class Queries {
      * @param username - username to validate
      * @return - returns boolean to check that the user does not exist
      * (false if they do exist, true if they do not)
+     *
+     * Used by /addNewPerson
      */
     public boolean checkNotExistingUser(String username, Connection c) throws SQLException {
         // selects count to see if there are any results for that username
@@ -42,6 +44,8 @@ public class Queries {
      * @param forumTitle - checks for matching title, used rather than id because UNIQUE
      * @return - returns boolean to check that the forum does not exist
      * (false if it does exist, true if it does not)
+     *
+     * Used by /createForum
      */
     public boolean checkNotExistingForum(String forumTitle, Connection c) throws SQLException {
         // similar to check not existing user, count based on forumTitle (forumTitles are unique)
@@ -63,6 +67,8 @@ public class Queries {
      * @param name - name of the user - not null
      * @param username - username, checked prior to inserting that it does not exist
      * @param stuId - can be null
+     *
+     * Used by /addNewPerson
      */
     public void insertPerson(String name, String username, String stuId, Connection c) throws SQLException {
         try (PreparedStatement p = c.prepareStatement(
@@ -79,6 +85,8 @@ public class Queries {
     /**
      * insert new forum in to the database, rollback caught in the calling method
      * @param title - title of the forum, already ensured that it does not exist, can not be null
+     *
+     * Used by /createForum
      */
     public void insertForum(String title, Connection c) throws SQLException{
         try (PreparedStatement p = c.prepareStatement(
@@ -95,6 +103,8 @@ public class Queries {
      * @param title - title of the topic, can not be null
      * @param forumId - FK for the forum, can not be null
      * @param personId - id of the person who wrote the topic, can not be null
+     *
+     * Used by /createTopic
      */
     public void insertTopic(String title, int forumId, int personId, Connection c) throws SQLException {
         try (PreparedStatement s = c.prepareStatement(
@@ -113,6 +123,8 @@ public class Queries {
      * @param text - body of the post, cannot be null/empty
      * @param topicId - FK for the topic, cannot be null
      * @param personId - id of the person who wrote the post, cannot be null
+     *
+     * Used by /createTopic, /createPost
      */
     public void insertPost(String text, int personId, int topicId, Connection c)throws SQLException{
         try (PreparedStatement p = c.prepareStatement(
@@ -131,6 +143,8 @@ public class Queries {
      * the topicId is retrieved by getting the most recently insterted topics
      * by ordering to create the first post
      * @return - int value, that is the topic id
+     *
+     * used by /createTopic
      */
     public int getTopicId(Connection c) throws SQLException{
         int topicId;
