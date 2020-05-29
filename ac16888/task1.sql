@@ -1,19 +1,11 @@
 DROP TABLE IF EXISTS Post;
-DROP TABLE IF EXISTS TopicLike;
-DROP TABLE IF EXISTS Person;
 DROP TABLE IF EXISTS Topic;
+DROP TABLE IF EXISTS Person;
 DROP TABLE IF EXISTS Forum;
 
 CREATE TABLE Forum(
   id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
   title       VARCHAR(100)   NOT NULL      UNIQUE
-);
-
-CREATE TABLE Topic(
-  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
-  title       VARCHAR(100)   NOT NULL,
-  forumId     INTEGER        NOT NULL,
-  CONSTRAINT  Forum_FK       FOREIGN KEY(forumId) REFERENCES Forum(id)
 );
 
 CREATE TABLE Person(
@@ -23,12 +15,22 @@ CREATE TABLE Person(
   stuId     VARCHAR(10)      NULL
 );
 
+CREATE TABLE Topic(
+  id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
+  title       VARCHAR(100)   NOT NULL,
+  forumId     INTEGER        NOT NULL,
+  personId    INTEGER        NOT NULL,
+  CONSTRAINT  Person_FK      FOREIGN KEY(personId) REFERENCES Person(id),
+  CONSTRAINT  Forum_FK       FOREIGN KEY(forumId) REFERENCES Forum(id)
+);
+
+
 CREATE TABLE Post(
   id          INTEGER        PRIMARY KEY   AUTO_INCREMENT,
   timePosted  DATETIME       NOT NULL,
   postText    VARCHAR(8000)  NOT NULL,
   personId    INTEGER        NOT NULL,
   topicId     INTEGER        NOT NULL,
-  CONSTRAINT  Person_FK      FOREIGN KEY(personId) REFERENCES Person(id),
+  CONSTRAINT  Person_FK2    FOREIGN KEY(personId) REFERENCES Person(id),
   CONSTRAINT  Topic_FK      FOREIGN KEY(topicId) REFERENCES Topic(id)
 );

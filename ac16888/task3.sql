@@ -5,8 +5,8 @@ CREATE TABLE TopicLike(
   PRIMARY KEY (topicId, personId),
   topicId       INTEGER       NOT NULL,
   personId      INTEGER       NOT NULL,
-  CONSTRAINT    Person_FK2     FOREIGN KEY(personId) REFERENCES Person(id),
-  CONSTRAINT    Topic_FK      FOREIGN KEY(topicId) REFERENCES Topic(id)
+  CONSTRAINT    Person_FK3     FOREIGN KEY(personId) REFERENCES Person(id),
+  CONSTRAINT    Topic_FK2      FOREIGN KEY(topicId) REFERENCES Topic(id)
 );
 
 CREATE TABLE PostLike(
