@@ -36,11 +36,9 @@ import uk.ac.bris.cs.databases.api.TopicView;
 public class API implements APIProvider {
     private final Connection c;
     private final Queries query = new Queries(); // contains general SQL queries for this database schema
-
     public API(Connection c) {
         this.c = c;
     }
-
 
     /* predefined methods */
 
@@ -262,7 +260,7 @@ public class API implements APIProvider {
             ResultSet r = p.executeQuery();
             if(!r.next()){
                 // check that the user actually exists
-                return Result.failure("No user existing.");
+                return Result.failure("No user with this username.");
             } // get their id
             personId = r.getInt("id");
         } catch (SQLException e) {
@@ -318,14 +316,23 @@ public class API implements APIProvider {
     /// END OF INTERFACE METHODS ///
     /// Below are private methods to assist in functionalities of API methods///
 
-    /* this method is used to count chars to guard against database exceptions / remove duplicate code
-    in API  */
+    /**
+     * Count chars to guard against SQL exceptions for .
+     * @param input - the input to count the characters of
+     * @param limit - the limit as specified by the schema
+     * @return Boolean value, if characters in input is less than input (true),
+     * false if not
+     */
     private boolean checkLength(String input, int limit){
         int chars = input.length();
         return chars < limit;
     }
 
-    // executes the rollBack attempt to cut down on duplicated code
+    /**
+     * Excutes the rollback after catching the exception to avoid duplicated code
+     * @param e - the SQLException that has been caught
+     * @return Result type with appropriate message
+     */
     private Result rollBack(SQLException e){
         try {
             c.rollback();

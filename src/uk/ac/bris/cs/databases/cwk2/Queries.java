@@ -15,7 +15,13 @@ import java.sql.Connection;
  * @author ac16888
  */
 public class Queries {
-    // returns boolean too check that the user does not exist (false if they do exist, true if they do not)
+
+    /**
+     * Checks if the user does NOT exist
+     * @param username - username to validate
+     * @return - returns boolean to check that the user does not exist
+     * (false if they do exist, true if they do not)
+     */
     public boolean checkNotExistingUser(String username, Connection c) throws SQLException {
         // selects count to see if there are any results for that username
         try (PreparedStatement p = c.prepareStatement(
@@ -31,7 +37,12 @@ public class Queries {
         return true;
     }
 
-    // checks that a forum does not exist, return boolean - false if it does exist, true if it does not
+    /**
+     * Checks that the forum does NOT exist to avoid duplicated forum titles
+     * @param forumTitle - checks for matching title, used rather than id because UNIQUE
+     * @return - returns boolean to check that the forum does not exist
+     * (false if it does exist, true if it does not)
+     */
     public boolean checkNotExistingForum(String forumTitle, Connection c) throws SQLException {
         // similar to check not existing user, count based on forumTitle (forumTitles are unique)
         try (PreparedStatement p = c.prepareStatement(
@@ -47,7 +58,12 @@ public class Queries {
         return true;
     }
 
-    // insert new person in to the database, rollback caught in the calling method
+    /**
+     * insert new person in to the database, rollback caught in the calling method
+     * @param name - name of the user - not null
+     * @param username - username, checked prior to inserting that it does not exist
+     * @param stuId - can be null
+     */
     public void insertPerson(String name, String username, String stuId, Connection c) throws SQLException {
         try (PreparedStatement p = c.prepareStatement(
         "INSERT INTO Person (name, username, stuId) VALUES (?, ?, ?)"
@@ -60,7 +76,10 @@ public class Queries {
         }
     }
 
-    // inserts new forum, rollback caught in the calling method
+    /**
+     * insert new forum in to the database, rollback caught in the calling method
+     * @param title - title of the forum, already ensured that it does not exist, can not be null
+     */
     public void insertForum(String title, Connection c) throws SQLException{
         try (PreparedStatement p = c.prepareStatement(
         "INSERT INTO Forum (title) VALUES (?)"
@@ -71,7 +90,12 @@ public class Queries {
         }
     }
 
-    // insert new topic data, rollback caught in the calling method
+    /**
+     * insert new topic in to the database, rollback caught in the calling method
+     * @param title - title of the topic, can not be null
+     * @param forumId - FK for the forum, can not be null
+     * @param personId - id of the person who wrote the topic, can not be null
+     */
     public void insertTopic(String title, int forumId, int personId, Connection c) throws SQLException {
         try (PreparedStatement s = c.prepareStatement(
         "INSERT INTO Topic (title, forumId, personId) VALUES (?, ?, ?)"
@@ -84,7 +108,12 @@ public class Queries {
         }
     }
 
-    // insert new post to database, rollback caught in the calling method
+    /**
+     * insert new post in to the database, rollback caught in the calling method
+     * @param text - body of the post, cannot be null/empty
+     * @param topicId - FK for the topic, cannot be null
+     * @param personId - id of the person who wrote the post, cannot be null
+     */
     public void insertPost(String text, int personId, int topicId, Connection c)throws SQLException{
         try (PreparedStatement p = c.prepareStatement(
         "INSERT INTO Post (timePosted, postText, personId, topicId) VALUES (now(), ?, ?, ?)"
@@ -97,7 +126,12 @@ public class Queries {
         }
     }
 
-    // return the topicId
+    /**
+     * insert new post in to the database, rollback caught in the calling method
+     * the topicId is retrieved by getting the most recently insterted topics
+     * by ordering to create the first post
+     * @return - int value, that is the topic id
+     */
     public int getTopicId(Connection c) throws SQLException{
         int topicId;
         // gets the topicId by getting the most recent topicId (Used to create new post just after topic
