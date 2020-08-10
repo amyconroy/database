@@ -1,4 +1,4 @@
-# web forum + database
+# web forum database
 This project is the implementation of a server-/database-layer features of an online forum application.
 
 The required methods can be found in the API class, and helper methods are in the Query class. All methods are found: 
